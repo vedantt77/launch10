@@ -33,6 +33,7 @@ export interface Startup {
 }
 
 export interface SubmittedStartup {
+  id: string;
   name: string;
   url: string;
   socialHandle: string;
@@ -41,4 +42,6 @@ export interface SubmittedStartup {
   submittedAt: Date;
   scheduledLaunchDate?: Date;
   status: string;
+  listingType?: string;
+  doFollowBacklink?: boolean;
 }
