@@ -12,6 +12,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { SubmittedStartup } from '@/lib/types';
+import { useSubmissions } from '@/lib/hooks/useSubmissions';
 
 type ListingType = 'regular' | 'boosted' | 'premium';
 
@@ -21,13 +22,25 @@ export function AdminDashboard() {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [pendingStartups, setPendingStartups] = useState<SubmittedStartup[]>([]);
-  const [approvedStartups, setApprovedStartups] = useState<SubmittedStartup[]>([]);
-  const [rejectedStartups, setRejectedStartups] = useState<SubmittedStartup[]>([]);
   const [isApproveDialogOpen, setIsApproveDialogOpen] = useState(false);
   const [selectedStartupId, setSelectedStartupId] = useState<string | null>(null);
   const [selectedListingType, setSelectedListingType] = useState<ListingType>('regular');
   const [isReapproveDialogOpen, setIsReapproveDialogOpen] = useState(false);
+
+  const { 
+    submissions: pendingStartups,
+    isLoading: isLoadingPending 
+  } = useSubmissions(undefined, 'pending');
+
+  const { 
+    submissions: approvedStartups,
+    isLoading: isLoadingApproved 
+  } = useSubmissions(undefined, 'approved');
+
+  const { 
+    submissions: rejectedStartups,
+    isLoading: isLoadingRejected 
+  } = useSubmissions(undefined, 'rejected');
 
   useEffect(() => {
     const checkAdminStatus = async () => {
@@ -48,88 +61,16 @@ export function AdminDashboard() {
         }
 
         setIsAdmin(true);
-        fetchStartups();
       } catch (error) {
         console.error('Error checking admin status:', error);
         navigate('/');
+      } finally {
+        setIsLoading(false);
       }
     };
 
     checkAdminStatus();
   }, [user, navigate]);
-
-  const fetchStartups = async () => {
-    try {
-      const startupsRef = collection(db, 'startups');
-      const [pendingSnap, approvedSnap, rejectedSnap] = await Promise.all([
-        getDocs(query(startupsRef, where('status', '==', 'pending'))),
-        getDocs(query(startupsRef, where('status', '==', 'approved'))),
-        getDocs(query(startupsRef, where('status', '==', 'rejected')))
-      ]);
-
-      const pending: SubmittedStartup[] = [];
-      const approved: SubmittedStartup[] = [];
-      const rejected: SubmittedStartup[] = [];
-
-      pendingSnap.forEach(doc => {
-        const data = doc.data();
-        pending.push({
-          id: doc.id,
-          name: data.name,
-          url: data.url,
-          socialHandle: data.socialHandle,
-          description: data.description,
-          logoUrl: data.logoUrl,
-          submittedAt: data.createdAt.toDate(),
-          scheduledLaunchDate: data.scheduledLaunchDate?.toDate(),
-          status: data.status
-        });
-      });
-
-      approvedSnap.forEach(doc => {
-        const data = doc.data();
-        approved.push({
-          id: doc.id,
-          name: data.name,
-          url: data.url,
-          socialHandle: data.socialHandle,
-          description: data.description,
-          logoUrl: data.logoUrl,
-          submittedAt: data.createdAt.toDate(),
-          scheduledLaunchDate: data.scheduledLaunchDate?.toDate(),
-          status: data.status
-        });
-      });
-
-      rejectedSnap.forEach(doc => {
-        const data = doc.data();
-        rejected.push({
-          id: doc.id,
-          name: data.name,
-          url: data.url,
-          socialHandle: data.socialHandle,
-          description: data.description,
-          logoUrl: data.logoUrl,
-          submittedAt: data.createdAt.toDate(),
-          scheduledLaunchDate: data.scheduledLaunchDate?.toDate(),
-          status: data.status
-        });
-      });
-
-      setPendingStartups(pending);
-      setApprovedStartups(approved);
-      setRejectedStartups(rejected);
-    } catch (error) {
-      console.error('Error fetching startups:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to fetch startups',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const calculateNextLaunchDate = () => {
     const now = new Date();
@@ -156,7 +97,7 @@ export function AdminDashboard() {
       const startupRef = doc(db, 'startups', selectedStartupId);
       const scheduledLaunchDate = selectedListingType === 'regular' 
         ? calculateNextLaunchDate() 
-        : new Date(); // Immediate launch for premium/boosted
+        : new Date();
 
       await updateDoc(startupRef, {
         status: 'approved',
@@ -164,6 +105,8 @@ export function AdminDashboard() {
         scheduledLaunchDate: Timestamp.fromDate(scheduledLaunchDate),
         updatedAt: Timestamp.now()
       });
+
+      clearSubmissionsCache();
 
       toast({
         title: 'Success',
@@ -174,7 +117,6 @@ export function AdminDashboard() {
       setIsReapproveDialogOpen(false);
       setSelectedStartupId(null);
       setSelectedListingType('regular');
-      fetchStartups();
     } catch (error) {
       console.error('Error updating startup status:', error);
       toast({
@@ -193,12 +135,12 @@ export function AdminDashboard() {
         updatedAt: Timestamp.now()
       });
 
+      clearSubmissionsCache();
+
       toast({
         title: 'Success',
         description: 'Startup rejected successfully',
       });
-
-      fetchStartups();
     } catch (error) {
       console.error('Error updating startup status:', error);
       toast({
