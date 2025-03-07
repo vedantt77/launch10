@@ -10,9 +10,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { SubmittedStartup } from '@/lib/types';
-import { useSubmissions } from '@/lib/hooks/useSubmissions';
+import { useSubmissions, clearSubmissionsCache } from '@/lib/hooks/useSubmissions';
 
 type ListingType = 'regular' | 'boosted' | 'premium';
 
@@ -26,6 +27,7 @@ export function AdminDashboard() {
   const [selectedStartupId, setSelectedStartupId] = useState<string | null>(null);
   const [selectedListingType, setSelectedListingType] = useState<ListingType>('regular');
   const [isReapproveDialogOpen, setIsReapproveDialogOpen] = useState(false);
+  const [doFollowBacklink, setDoFollowBacklink] = useState(true);
 
   const { 
     submissions: pendingStartups,
@@ -102,6 +104,7 @@ export function AdminDashboard() {
       await updateDoc(startupRef, {
         status: 'approved',
         listingType: selectedListingType,
+        doFollowBacklink: doFollowBacklink,
         scheduledLaunchDate: Timestamp.fromDate(scheduledLaunchDate),
         updatedAt: Timestamp.now()
       });
@@ -206,6 +209,18 @@ export function AdminDashboard() {
               Scheduled for launch on: {startup.scheduledLaunchDate.toLocaleDateString()}
             </p>
           )}
+          {startup.status === 'approved' && (
+            <div className="flex items-center space-x-2 mt-2">
+              <Badge variant={startup.doFollowBacklink ? "success" : "secondary"}>
+                {startup.doFollowBacklink ? "doFollow" : "noFollow"} backlink
+              </Badge>
+              {startup.listingType && (
+                <Badge variant="outline">
+                  {startup.listingType} listing
+                </Badge>
+              )}
+            </div>
+          )}
         </div>
       </CardContent>
       {startup.status === 'pending' && (
@@ -265,7 +280,11 @@ export function AdminDashboard() {
             </TabsList>
 
             <TabsContent value="pending">
-              {pendingStartups.length === 0 ? (
+              {isLoadingPending ? (
+                <div className="text-center py-8">
+                  <div className="animate-pulse text-primary">Loading pending submissions...</div>
+                </div>
+              ) : pendingStartups.length === 0 ? (
                 <p className="text-center text-muted-foreground py-8">
                   No pending submissions
                 </p>
@@ -277,7 +296,11 @@ export function AdminDashboard() {
             </TabsContent>
 
             <TabsContent value="approved">
-              {approvedStartups.length === 0 ? (
+              {isLoadingApproved ? (
+                <div className="text-center py-8">
+                  <div className="animate-pulse text-primary">Loading approved submissions...</div>
+                </div>
+              ) : approvedStartups.length === 0 ? (
                 <p className="text-center text-muted-foreground py-8">
                   No approved submissions
                 </p>
@@ -289,7 +312,11 @@ export function AdminDashboard() {
             </TabsContent>
 
             <TabsContent value="rejected">
-              {rejectedStartups.length === 0 ? (
+              {isLoadingRejected ? (
+                <div className="text-center py-8">
+                  <div className="animate-pulse text-primary">Loading rejected submissions...</div>
+                </div>
+              ) : rejectedStartups.length === 0 ? (
                 <p className="text-center text-muted-foreground py-8">
                   No rejected submissions
                 </p>
@@ -315,7 +342,7 @@ export function AdminDashboard() {
             </DialogDescription>
           </DialogHeader>
           
-          <div className="py-6">
+          <div className="py-6 space-y-6">
             <RadioGroup
               value={selectedListingType}
               onValueChange={(value) => setSelectedListingType(value as ListingType)}
@@ -334,6 +361,17 @@ export function AdminDashboard() {
                 <Label htmlFor="premium">Premium Listing (Immediate)</Label>
               </div>
             </RadioGroup>
+
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="dofollow"
+                checked={doFollowBacklink}
+                onCheckedChange={setDoFollowBacklink}
+              />
+              <Label htmlFor="dofollow">
+                Enable doFollow backlink
+              </Label>
+            </div>
           </div>
 
           <DialogFooter>
