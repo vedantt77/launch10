@@ -87,7 +87,7 @@ export function SubmitStartupPage() {
       await uploadBytes(logoRef, file);
       const logoUrl = await getDownloadURL(logoRef);
 
-      // Add startup to Firestore
+      // Add startup to Firestore with pending status
       const startupRef = collection(db, 'startups');
       await addDoc(startupRef, {
         name: data.name,
@@ -97,18 +97,18 @@ export function SubmitStartupPage() {
         category: selectedCategory,
         logoUrl,
         userId: user.uid,
-        status: 'pending',
+        status: 'pending', // Always set initial status as pending
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now()
       });
 
       toast({
         title: 'Success!',
-        description: 'Your startup has been submitted for review.',
+        description: 'Your startup has been submitted and is pending review. We will notify you once it is approved.',
       });
 
-      // Redirect to home page
-      navigate('/');
+      // Redirect to profile page where they can see their submission status
+      navigate('/profile');
     } catch (error) {
       console.error('Error submitting startup:', error);
       toast({
