@@ -93,7 +93,7 @@ export function Navbar() {
                 whileTap={{ scale: 0.95 }}
               >
                 <Link
-                  to="https://tally.so/r/w5pePN"
+                  to="/submit"
                   className="ml-2 px-4 py-2 text-foreground font-medium rounded-lg border border-foreground transition-colors duration-200 hover:bg-accent/80 rainbow-border-button"
                 >
                   + Submit
@@ -216,7 +216,7 @@ export function Navbar() {
                       whileTap={{ scale: 0.95 }}
                     >
                       <Link 
-                        to={item === '+ Submit' ? "https://tally.so/r/mV92zJ" : `/${item.toLowerCase()}`}
+                        to={item === '+ Submit' ? "/submit" : `/${item.toLowerCase()}`}
                         className={`block px-4 py-2 text-foreground rounded-lg transition-colors duration-200 hover:bg-accent/80 ${
                           item === '+ Submit' ? 'border border-foreground mt-2 rainbow-border-button' : ''
                         }`}
