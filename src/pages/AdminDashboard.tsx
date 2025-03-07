@@ -136,12 +136,6 @@ export function AdminDashboard() {
     const nextSunday = new Date(now);
     nextSunday.setDate(now.getDate() + (7 - now.getDay()));
     nextSunday.setHours(0, 0, 0, 0);
-    
-    // If it's already past Wednesday, schedule for next week
-    if (now.getDay() > 3) { // After Wednesday
-      nextSunday.setDate(nextSunday.getDate() + 7);
-    }
-    
     return nextSunday;
   };
 
