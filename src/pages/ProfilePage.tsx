@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { motion } from 'framer-motion';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '@/lib/firebase';
 import { useAuthContext } from '@/providers/AuthProvider';
@@ -10,8 +10,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import { SubmittedStartup } from '@/lib/types';
 
 interface UserProfile {
   displayName: string;
@@ -38,6 +41,7 @@ export function ProfilePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [submittedStartups, setSubmittedStartups] = useState<SubmittedStartup[]>([]);
   const [usernameStatus, setUsernameStatus] = useState<{
     isValid: boolean;
     message: string;
@@ -50,10 +54,8 @@ export function ProfilePage() {
 
   const { register: registerProfile, handleSubmit: handleSubmitProfile, formState: { errors: profileErrors }, setValue, watch: watchProfile } = useForm<ProfileFormData>();
 
-  // Watch username field for real-time validation
   const username = watchProfile('username');
 
-  // Debounce function
   const debounce = (func: Function, wait: number) => {
     let timeout: NodeJS.Timeout;
     return (...args: any[]) => {
@@ -62,7 +64,6 @@ export function ProfilePage() {
     };
   };
 
-  // Check username availability
   const checkUsername = async (username: string) => {
     if (!username || username === userProfile?.username) {
       setUsernameStatus({
@@ -114,10 +115,8 @@ export function ProfilePage() {
     }
   };
 
-  // Debounced username check
   const debouncedCheckUsername = debounce(checkUsername, 500);
 
-  // Watch username changes
   useEffect(() => {
     if (username) {
       debouncedCheckUsername(username);
@@ -125,17 +124,50 @@ export function ProfilePage() {
   }, [username]);
 
   useEffect(() => {
+    const fetchSubmittedStartups = async () => {
+      if (!user) return;
+
+      try {
+        const startupsRef = collection(db, 'startups');
+        const q = query(startupsRef, where('userId', '==', user.uid));
+        const querySnapshot = await getDocs(q);
+        
+        const startups: SubmittedStartup[] = [];
+        querySnapshot.forEach((doc) => {
+          const data = doc.data();
+          startups.push({
+            id: doc.id,
+            name: data.name,
+            url: data.url,
+            socialHandle: data.socialHandle,
+            description: data.description,
+            logoUrl: data.logoUrl,
+            submittedAt: data.createdAt.toDate(),
+            scheduledLaunchDate: data.scheduledLaunchDate?.toDate(),
+            status: data.status,
+            listingType: data.listingType
+          });
+        });
+
+        setSubmittedStartups(startups);
+      } catch (error) {
+        console.error('Error fetching submitted startups:', error);
+      }
+    };
+
+    fetchSubmittedStartups();
+  }, [user]);
+
+  useEffect(() => {
     async function fetchData() {
       if (!user) return;
 
       try {
-        // Fetch user profile
         const userDoc = await getDoc(doc(db, 'users', user.uid));
         if (userDoc.exists()) {
           const profileData = userDoc.data() as UserProfile;
           setUserProfile(profileData);
           
-          // Set form values
           setValue('displayName', profileData.displayName);
           setValue('username', profileData.username);
           setValue('email', profileData.email);
@@ -182,7 +214,6 @@ export function ProfilePage() {
     try {
       let avatarUrl = userProfile.avatarUrl;
 
-      // Handle avatar upload if a new file is selected
       if (formData.avatar?.length > 0) {
         const file = formData.avatar[0];
         if (file.size > 200 * 1024) {
@@ -196,9 +227,7 @@ export function ProfilePage() {
         avatarUrl = await getDownloadURL(avatarRef);
       }
 
-      // First, update the username in the usernames collection if changed
       if (formData.username.toLowerCase() !== userProfile.username.toLowerCase()) {
-        // Remove old username
         if (userProfile.username) {
           await setDoc(doc(db, 'usernames', userProfile.username.toLowerCase()), {
             uid: null,
@@ -206,14 +235,12 @@ export function ProfilePage() {
           });
         }
 
-        // Add new username
         await setDoc(doc(db, 'usernames', formData.username.toLowerCase()), {
           uid: user.uid,
           username: formData.username.toLowerCase()
         });
       }
 
-      // Then update the user profile
       const updatedProfile = {
         displayName: formData.displayName,
         username: formData.username.toLowerCase(),
@@ -248,6 +275,29 @@ export function ProfilePage() {
     }
   };
 
+  const getStatusBadgeVariant = (status: string) => {
+    switch (status) {
+      case 'approved':
+        return 'success';
+      case 'pending':
+        return 'secondary';
+      case 'rejected':
+        return 'destructive';
+      default:
+        return 'default';
+    }
+  };
+
+  const formatDate = (date: Date) => {
+    return new Intl.DateTimeFormat('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    }).format(date);
+  };
+
   if (!user) {
     navigate('/login');
     return null;
@@ -264,132 +314,192 @@ export function ProfilePage() {
   return (
     <div className="min-h-screen bg-background py-12 px-4">
       <div className="container max-w-4xl mx-auto">
-        <Card className="mb-8">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <Avatar className="h-20 w-20">
-                  {userProfile?.avatarUrl ? (
-                    <AvatarImage src={userProfile.avatarUrl} alt={userProfile.displayName} />
-                  ) : (
-                    <AvatarFallback>
-                      {userProfile?.displayName?.charAt(0) || user?.email?.charAt(0)}
-                    </AvatarFallback>
-                  )}
-                </Avatar>
-                <div>
-                  <CardTitle className="text-2xl">{userProfile?.displayName}</CardTitle>
-                  <CardDescription>@{userProfile?.username}</CardDescription>
-                </div>
-              </div>
-              <Button 
-                variant="outline" 
-                onClick={() => setIsEditingProfile(!isEditingProfile)}
-              >
-                {isEditingProfile ? 'Cancel' : 'Edit Profile'}
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {isEditingProfile ? (
-              <form onSubmit={handleSubmitProfile(handleProfileUpdate)} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="displayName">Display Name *</Label>
-                  <Input
-                    id="displayName"
-                    {...registerProfile('displayName', { required: 'Display name is required' })}
-                  />
-                  {profileErrors.displayName && (
-                    <p className="text-sm text-destructive">{profileErrors.displayName.message}</p>
-                  )}
-                </div>
+        <Tabs defaultValue="profile" className="space-y-8">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="profile">Profile</TabsTrigger>
+            <TabsTrigger value="submissions">My Submissions</TabsTrigger>
+          </TabsList>
 
-                <div className="space-y-2">
-                  <Label htmlFor="username">Username *</Label>
-                  <Input
-                    id="username"
-                    {...registerProfile('username', {
-                      required: 'Username is required',
-                      pattern: {
-                        value: /^[a-zA-Z0-9_]{3,20}$/,
-                        message: 'Username must be 3-20 characters and can only contain letters, numbers, and underscores'
-                      }
-                    })}
-                    className={
-                      usernameStatus.isChecking 
-                        ? 'opacity-50' 
-                        : usernameStatus.isValid 
-                          ? 'border-green-500' 
-                          : 'border-red-500'
-                    }
-                  />
-                  {usernameStatus.isChecking ? (
-                    <p className="text-sm text-muted-foreground">Checking availability...</p>
-                  ) : (
-                    <p className={`text-sm ${usernameStatus.isValid ? 'text-green-500' : 'text-red-500'}`}>
-                      {usernameStatus.message}
-                    </p>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="bio">Bio</Label>
-                  <Input
-                    id="bio"
-                    {...registerProfile('bio')}
-                    placeholder="Tell us about yourself..."
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="avatar">Profile Picture (Max 200KB)</Label>
-                  <Input
-                    id="avatar"
-                    type="file"
-                    accept="image/*"
-                    {...registerProfile('avatar')}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Maximum file size: 200KB
-                  </p>
-                </div>
-
-                <div className="flex justify-end gap-4">
-                  <Button
-                    type="submit"
-                    disabled={isSubmitting || !usernameStatus.isValid || usernameStatus.isChecking}
+          <TabsContent value="profile">
+            <Card className="mb-8">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <Avatar className="h-20 w-20">
+                      {userProfile?.avatarUrl ? (
+                        <AvatarImage src={userProfile.avatarUrl} alt={userProfile.displayName} />
+                      ) : (
+                        <AvatarFallback>
+                          {userProfile?.displayName?.charAt(0) || user?.email?.charAt(0)}
+                        </AvatarFallback>
+                      )}
+                    </Avatar>
+                    <div>
+                      <CardTitle className="text-2xl">{userProfile?.displayName}</CardTitle>
+                      <CardDescription>@{userProfile?.username}</CardDescription>
+                    </div>
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setIsEditingProfile(!isEditingProfile)}
                   >
-                    {isSubmitting ? 'Saving...' : 'Save Changes'}
+                    {isEditingProfile ? 'Cancel' : 'Edit Profile'}
                   </Button>
                 </div>
-              </form>
-            ) : (
-              <div className="space-y-4">
-                {userProfile?.bio ? (
-                  <div>
-                    <Label>Bio</Label>
-                    <p className="text-muted-foreground">{userProfile.bio}</p>
+              </CardHeader>
+              <CardContent>
+                {isEditingProfile ? (
+                  <form onSubmit={handleSubmitProfile(handleProfileUpdate)} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="displayName">Display Name *</Label>
+                      <Input
+                        id="displayName"
+                        {...registerProfile('displayName', { required: 'Display name is required' })}
+                      />
+                      {profileErrors.displayName && (
+                        <p className="text-sm text-destructive">{profileErrors.displayName.message}</p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="username">Username *</Label>
+                      <Input
+                        id="username"
+                        {...registerProfile('username', {
+                          required: 'Username is required',
+                          pattern: {
+                            value: /^[a-zA-Z0-9_]{3,20}$/,
+                            message: 'Username must be 3-20 characters and can only contain letters, numbers, and underscores'
+                          }
+                        })}
+                        className={
+                          usernameStatus.isChecking 
+                            ? 'opacity-50' 
+                            : usernameStatus.isValid 
+                              ? 'border-green-500' 
+                              : 'border-red-500'
+                        }
+                      />
+                      {usernameStatus.isChecking ? (
+                        <p className="text-sm text-muted-foreground">Checking availability...</p>
+                      ) : (
+                        <p className={`text-sm ${usernameStatus.isValid ? 'text-green-500' : 'text-red-500'}`}>
+                          {usernameStatus.message}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="bio">Bio</Label>
+                      <Input
+                        id="bio"
+                        {...registerProfile('bio')}
+                        placeholder="Tell us about yourself..."
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="avatar">Profile Picture (Max 200KB)</Label>
+                      <Input
+                        id="avatar"
+                        type="file"
+                        accept="image/*"
+                        {...registerProfile('avatar')}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Maximum file size: 200KB
+                      </p>
+                    </div>
+
+                    <div className="flex justify-end gap-4">
+                      <Button
+                        type="submit"
+                        disabled={isSubmitting || !usernameStatus.isValid || usernameStatus.isChecking}
+                      >
+                        {isSubmitting ? 'Saving...' : 'Save Changes'}
+                      </Button>
+                    </div>
+                  </form>
+                ) : (
+                  <div className="space-y-4">
+                    {userProfile?.bio ? (
+                      <div>
+                        <Label>Bio</Label>
+                        <p className="text-muted-foreground">{userProfile.bio}</p>
+                      </div>
+                    ) : (
+                      <p className="text-muted-foreground italic">No bio provided</p>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="submissions">
+            <Card>
+              <CardHeader>
+                <CardTitle>My Startup Submissions</CardTitle>
+                <CardDescription>
+                  Track the status of your submitted startups
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {submittedStartups.length === 0 ? (
+                  <div className="text-center py-8">
+                    <p className="text-muted-foreground mb-4">You haven't submitted any startups yet</p>
+                    <Button asChild>
+                      <a href="https://tally.so/r/w5pePN" target="_blank" rel="noopener noreferrer">
+                        Submit Your First Startup
+                      </a>
+                    </Button>
                   </div>
                 ) : (
-                  <p className="text-muted-foreground italic">No bio provided</p>
+                  <div className="space-y-4">
+                    {submittedStartups.map((startup) => (
+                      <Card key={startup.id} className="p-4">
+                        <div className="flex items-start gap-4">
+                          <img 
+                            src={startup.logoUrl} 
+                            alt={startup.name} 
+                            className="w-12 h-12 rounded-lg object-cover"
+                          />
+                          <div className="flex-1">
+                            <div className="flex items-start justify-between">
+                              <div>
+                                <h3 className="font-semibold">{startup.name}</h3>
+                                <p className="text-sm text-muted-foreground">{startup.description}</p>
+                              </div>
+                              <Badge variant={getStatusBadgeVariant(startup.status)}>
+                                {startup.status.charAt(0).toUpperCase() + startup.status.slice(1)}
+                              </Badge>
+                            </div>
+                            <div className="mt-2 space-y-1 text-sm">
+                              <p>Submitted: {formatDate(startup.submittedAt)}</p>
+                              {startup.scheduledLaunchDate && startup.status === 'approved' && (
+                                <p className="text-primary">
+                                  {startup.listingType === 'regular' 
+                                    ? `Scheduled for launch: ${formatDate(startup.scheduledLaunchDate)}`
+                                    : `Launched on: ${formatDate(startup.scheduledLaunchDate)}`
+                                  }
+                                </p>
+                              )}
+                              {startup.listingType && startup.status === 'approved' && (
+                                <Badge variant="outline" className="mt-2">
+                                  {startup.listingType.charAt(0).toUpperCase() + startup.listingType.slice(1)} Listing
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
                 )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <div className="text-center">
-          <Button asChild>
-            <a 
-              href="https://tally.so/r/w5pePN"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-lg"
-            >
-              Submit Your Startup
-            </a>
-          </Button>
-        </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );
