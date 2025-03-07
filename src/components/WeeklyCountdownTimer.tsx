@@ -80,7 +80,7 @@ export function WeeklyCountdownTimer() {
 
           <div className="text-center sm:text-right whitespace-nowrap">
             <a 
-              href="https://tally.so/r/w5pePN" 
+              href="/submit" 
               className="text-sm sm:text-base text-primary hover:underline font-medium"
             >
               Submit your startup →
