@@ -1,0 +1,21 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /startup-logos/{fileName} {
+      allow read: if true;
+      allow create: if request.auth != null 
+        && request.resource.size <= 200 * 1024 // 200KB max
+        && request.resource.contentType.matches('image/.*');
+      allow delete: if false;
+    }
+    
+    match /avatars/{userId}/{fileName} {
+      allow read: if true;
+      allow create, update: if request.auth != null 
+        && request.auth.uid == userId
+        && request.resource.size <= 200 * 1024 // 200KB max
+        && request.resource.contentType.matches('image/.*');
+      allow delete: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}

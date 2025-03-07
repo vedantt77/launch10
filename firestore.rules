@@ -1,0 +1,74 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isAdmin() {
+      return exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    // Admin collection
+    match /admins/{adminId} {
+      allow read: if request.auth != null;
+      allow write: if false; // Only manually add admins for security
+    }
+
+    // Users collection
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if request.auth != null && userId == request.auth.uid;
+      allow update: if isOwner(userId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Usernames collection - for username uniqueness
+    match /usernames/{username} {
+      allow read: if true;
+      allow write: if request.auth != null && (
+        // Allow if no user has claimed the username
+        !exists(/databases/$(database)/documents/usernames/$(username)) ||
+        // Or if the current user owns this username
+        get(/databases/$(database)/documents/usernames/$(username)).data.uid == request.auth.uid ||
+        // Or if the username is being released (uid set to null)
+        request.resource.data.uid == null
+      );
+    }
+
+    // Startups collection
+    match /startups/{startupId} {
+      allow read: if true;
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow update: if isAdmin() || isOwner(resource.data.userId);
+      allow delete: if isAdmin();
+    }
+
+    // Launches collection for upvotes
+    match /launches/{launchId} {
+      allow read: if true;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null && (
+        // Allow updating only upvotes and upvotedBy fields
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['upvotes', 'upvotedBy']) &&
+        // Ensure upvotedBy array only changes by adding/removing the current user's ID
+        (
+          // Adding user to upvotedBy
+          (
+            !resource.data.upvotedBy.hasAll([request.auth.uid]) &&
+            request.resource.data.upvotedBy.hasAll(resource.data.upvotedBy) &&
+            request.resource.data.upvotedBy.hasAll([request.auth.uid]) &&
+            request.resource.data.upvotes == resource.data.upvotes + 1
+          ) ||
+          // Removing user from upvotedBy
+          (
+            resource.data.upvotedBy.hasAll([request.auth.uid]) &&
+            request.resource.data.upvotedBy.hasAll(resource.data.upvotedBy.removeAll([request.auth.uid])) &&
+            request.resource.data.upvotes == resource.data.upvotes - 1
+          )
+        )
+      );
+    }
+  }
+}
