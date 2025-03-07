@@ -15,6 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { SubmittedStartup } from '@/lib/types';
+import { useSubmissions } from '@/lib/hooks/useSubmissions';
 
 interface UserProfile {
   displayName: string;
@@ -35,13 +36,13 @@ interface ProfileFormData {
 
 export function ProfilePage() {
   const { user } = useAuthContext();
-  const { toast } = useToast();
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
-  const [submittedStartups, setSubmittedStartups] = useState<SubmittedStartup[]>([]);
+  const { submissions: submittedStartups, isLoading: isLoadingSubmissions } = useSubmissions(user?.uid);
   const [usernameStatus, setUsernameStatus] = useState<{
     isValid: boolean;
     message: string;
@@ -122,41 +123,6 @@ export function ProfilePage() {
       debouncedCheckUsername(username);
     }
   }, [username]);
-
-  useEffect(() => {
-    const fetchSubmittedStartups = async () => {
-      if (!user) return;
-
-      try {
-        const startupsRef = collection(db, 'startups');
-        const q = query(startupsRef, where('userId', '==', user.uid));
-        const querySnapshot = await getDocs(q);
-        
-        const startups: SubmittedStartup[] = [];
-        querySnapshot.forEach((doc) => {
-          const data = doc.data();
-          startups.push({
-            id: doc.id,
-            name: data.name,
-            url: data.url,
-            socialHandle: data.socialHandle,
-            description: data.description,
-            logoUrl: data.logoUrl,
-            submittedAt: data.createdAt.toDate(),
-            scheduledLaunchDate: data.scheduledLaunchDate?.toDate(),
-            status: data.status,
-            listingType: data.listingType
-          });
-        });
-
-        setSubmittedStartups(startups);
-      } catch (error) {
-        console.error('Error fetching submitted startups:', error);
-      }
-    };
-
-    fetchSubmittedStartups();
-  }, [user]);
 
   useEffect(() => {
     async function fetchData() {
