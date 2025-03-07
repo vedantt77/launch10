@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { LaunchListItem } from '@/components/launch/LaunchListItem';
 import { PremiumListing } from '@/components/launch/PremiumListing';
 import { AnimatedHeader } from '@/components/launch/AnimatedHeader';
@@ -11,20 +11,31 @@ interface ListItem extends Launch {
 }
 
 const ROTATION_INTERVAL = 10 * 60 * 1000; // 10 minutes in milliseconds
+const BATCH_SIZE = 10; // Number of items to load per batch
 
 export function LaunchPage() {
   const [allLaunches, setAllLaunches] = useState<Launch[]>([]);
-  const [rotatedWeeklyLaunches, setRotatedWeeklyLaunches] = useState<Launch[]>([]);
-  const [rotatedBoostedLaunches, setRotatedBoostedLaunches] = useState<Launch[]>([]);
+  const [displayedLaunches, setDisplayedLaunches] = useState<Launch[]>([]);
+  const [rotationIndex, setRotationIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const [hasMore, setHasMore] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const observerRef = useRef<IntersectionObserver>();
+  const loadingRef = useRef<HTMLDivElement>(null);
+  const rotationTimer = useRef<NodeJS.Timeout>();
   
   // Fetch launches on component mount
   useEffect(() => {
     const fetchLaunches = async () => {
       try {
-        // Only fetch launches once and store them in state
         const launches = await getLaunches();
         setAllLaunches(launches);
+        
+        // Initially load first batch
+        const initialBatch = launches.slice(0, BATCH_SIZE);
+        setDisplayedLaunches(initialBatch);
+        setHasMore(launches.length > BATCH_SIZE);
+        
         setIsLoading(false);
       } catch (error) {
         console.error('Error fetching launches:', error);
@@ -34,6 +45,48 @@ export function LaunchPage() {
 
     fetchLaunches();
   }, []);
+
+  // Infinite scroll handler
+  const loadMoreLaunches = useCallback(() => {
+    if (!hasMore || isLoading) return;
+
+    const nextPage = currentPage + 1;
+    const start = (nextPage - 1) * BATCH_SIZE;
+    const end = start + BATCH_SIZE;
+    const nextBatch = allLaunches.slice(start, end);
+
+    if (nextBatch.length > 0) {
+      setDisplayedLaunches(prev => [...prev, ...nextBatch]);
+      setCurrentPage(nextPage);
+      setHasMore(end < allLaunches.length);
+    } else {
+      setHasMore(false);
+    }
+  }, [currentPage, hasMore, isLoading, allLaunches]);
+
+  // Intersection Observer setup
+  useEffect(() => {
+    if (isLoading) return;
+
+    observerRef.current = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore) {
+          loadMoreLaunches();
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    if (loadingRef.current) {
+      observerRef.current.observe(loadingRef.current);
+    }
+
+    return () => {
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+      }
+    };
+  }, [isLoading, hasMore, loadMoreLaunches]);
   
   // Memoize filtered launches
   const premiumLaunches = useMemo(() => 
@@ -46,14 +99,13 @@ export function LaunchPage() {
     [allLaunches]
   );
 
-  const weeklyLaunches = useMemo(async () => {
-    const weeklyLaunches = await getWeeklyLaunches();
-    return weeklyLaunches.filter(launch => !launch.listingType || launch.listingType === 'regular');
-  }, []);
+  const regularLaunches = useMemo(() => 
+    allLaunches.filter(launch => !launch.listingType || launch.listingType === 'regular'),
+    [allLaunches]
+  );
 
   // Get last week's winners
   const lastWeekWinners = useMemo(() => {
-    // Get the start and end dates of last week
     const now = new Date();
     const lastWeekStart = new Date(now);
     lastWeekStart.setDate(now.getDate() - now.getDay() - 7);
@@ -63,7 +115,6 @@ export function LaunchPage() {
     lastWeekEnd.setDate(lastWeekStart.getDate() + 6);
     lastWeekEnd.setHours(23, 59, 59, 999);
 
-    // Filter launches from last week and sort by upvotes
     const lastWeekLaunches = allLaunches.filter(launch => {
       const launchDate = new Date(launch.launchDate);
       return launchDate >= lastWeekStart && launchDate <= lastWeekEnd;
@@ -74,93 +125,81 @@ export function LaunchPage() {
       .slice(0, 3);
   }, [allLaunches]);
 
-  // Function to get current rotation index based on timestamp
-  const getCurrentRotationIndex = (listLength: number) => {
-    if (listLength <= 1) return 0;
-    const currentTime = Date.now();
-    const rotationCount = Math.floor(currentTime / ROTATION_INTERVAL);
-    return rotationCount % listLength;
-  };
+  // Rotation system
+  useEffect(() => {
+    // Calculate initial rotation index based on current time
+    const now = Date.now();
+    const initialRotationIndex = Math.floor(now / ROTATION_INTERVAL) % Math.max(regularLaunches.length, 1);
+    setRotationIndex(initialRotationIndex);
 
-  // Function to rotate array by index
-  const rotateArrayByIndex = (array: Launch[], index: number) => {
-    if (array.length <= 1) return [...array];
-    return [...array.slice(index), ...array.slice(0, index)];
-  };
+    // Calculate time until next rotation
+    const nextRotation = Math.ceil(now / ROTATION_INTERVAL) * ROTATION_INTERVAL;
+    const timeUntilNextRotation = nextRotation - now;
 
-  const insertBoostedLaunches = (launches: Launch[]): ListItem[] => {
-    if (!rotatedBoostedLaunches.length || !launches.length) {
-      return launches.map((launch, index) => ({
-        ...launch,
-        uniqueKey: `weekly-regular-${launch.id}-${index}`
-      }));
+    // Set up rotation timer
+    const startRotation = () => {
+      rotationTimer.current = setInterval(() => {
+        setRotationIndex(prevIndex => (prevIndex + 1) % Math.max(regularLaunches.length, 1));
+      }, ROTATION_INTERVAL);
+    };
+
+    // Initial timeout to sync with 10-minute intervals
+    const initialTimeout = setTimeout(() => {
+      setRotationIndex(prevIndex => (prevIndex + 1) % Math.max(regularLaunches.length, 1));
+      startRotation();
+    }, timeUntilNextRotation);
+
+    return () => {
+      clearTimeout(initialTimeout);
+      if (rotationTimer.current) {
+        clearInterval(rotationTimer.current);
+      }
+    };
+  }, [regularLaunches.length]);
+
+  const getRotatedLaunches = useCallback((launches: Launch[]): ListItem[] => {
+    if (!launches.length) return [];
+
+    const rotated = [
+      ...launches.slice(rotationIndex),
+      ...launches.slice(0, rotationIndex)
+    ];
+
+    return rotated.map((launch, index) => ({
+      ...launch,
+      uniqueKey: `${launch.id}-${rotationIndex}-${index}`
+    }));
+  }, [rotationIndex]);
+
+  const insertBoostedLaunches = useCallback((regularLaunches: Launch[]): ListItem[] => {
+    if (!boostedLaunches.length || !regularLaunches.length) {
+      return getRotatedLaunches(regularLaunches);
     }
 
+    const rotatedRegular = getRotatedLaunches(regularLaunches);
+    const rotatedBoosted = getRotatedLaunches(boostedLaunches);
+    
     const result: ListItem[] = [];
-    const spacing = Math.max(Math.floor(launches.length / rotatedBoostedLaunches.length), 2);
+    const spacing = Math.max(Math.floor(rotatedRegular.length / rotatedBoosted.length), 2);
     let boostedIndex = 0;
-    const timestamp = Math.floor(Date.now() / ROTATION_INTERVAL) * ROTATION_INTERVAL;
 
-    launches.forEach((launch, index) => {
-      result.push({
-        ...launch,
-        uniqueKey: `weekly-regular-${launch.id}-${index}-${timestamp}`
-      });
+    rotatedRegular.forEach((launch, index) => {
+      result.push(launch);
       
-      // Insert boosted launch after every 'spacing' number of regular launches
-      if ((index + 1) % spacing === 0 && boostedIndex < rotatedBoostedLaunches.length) {
-        const boostedLaunch = rotatedBoostedLaunches[boostedIndex];
-        result.push({
-          ...boostedLaunch,
-          uniqueKey: `weekly-boosted-${boostedLaunch.id}-${index}-${timestamp}`
-        });
+      if ((index + 1) % spacing === 0 && boostedIndex < rotatedBoosted.length) {
+        result.push(rotatedBoosted[boostedIndex]);
         boostedIndex++;
       }
     });
 
-    // If there are remaining boosted launches, distribute them evenly in the remaining spaces
-    while (boostedIndex < rotatedBoostedLaunches.length) {
-      const insertIndex = Math.floor((result.length / (rotatedBoostedLaunches.length - boostedIndex + 1)) * (boostedIndex + 1));
-      const boostedLaunch = rotatedBoostedLaunches[boostedIndex];
-      result.splice(insertIndex, 0, {
-        ...boostedLaunch,
-        uniqueKey: `weekly-boosted-${boostedLaunch.id}-remaining-${boostedIndex}-${timestamp}`
-      });
+    while (boostedIndex < rotatedBoosted.length) {
+      const insertIndex = Math.floor((result.length / (rotatedBoosted.length - boostedIndex + 1)) * (boostedIndex + 1));
+      result.splice(insertIndex, 0, rotatedBoosted[boostedIndex]);
       boostedIndex++;
     }
 
     return result;
-  };
-
-  // Update rotations based on current time
-  useEffect(() => {
-    const updateRotations = async () => {
-      const weeklyLaunchList = await weeklyLaunches;
-      const weeklyIndex = getCurrentRotationIndex(weeklyLaunchList.length);
-      const boostedIndex = getCurrentRotationIndex(boostedLaunches.length);
-
-      setRotatedWeeklyLaunches(rotateArrayByIndex(weeklyLaunchList, weeklyIndex));
-      setRotatedBoostedLaunches(rotateArrayByIndex(boostedLaunches, boostedIndex));
-    };
-
-    // Initial update
-    updateRotations();
-
-    // Calculate time until next rotation
-    const now = Date.now();
-    const nextRotation = Math.ceil(now / ROTATION_INTERVAL) * ROTATION_INTERVAL;
-    const timeUntilNextRotation = nextRotation - now;
-
-    // Set timeout for first rotation
-    const initialTimeout = setTimeout(() => {
-      updateRotations();
-      // Then set interval for subsequent rotations
-      const interval = setInterval(updateRotations, ROTATION_INTERVAL);
-      return () => clearInterval(interval);
-    }, timeUntilNextRotation);
-
-    return () => clearTimeout(initialTimeout);
-  }, [weeklyLaunches, boostedLaunches]);
+  }, [boostedLaunches, getRotatedLaunches]);
 
   if (isLoading) {
     return (
@@ -194,13 +233,23 @@ export function LaunchPage() {
 
           {/* Weekly launches with boosted listings */}
           <div className="space-y-4 mb-16">
-            {insertBoostedLaunches(rotatedWeeklyLaunches).map((launch) => (
+            {insertBoostedLaunches(displayedLaunches).map((launch) => (
               <LaunchListItem 
                 key={launch.uniqueKey}
                 launch={launch}
               />
             ))}
           </div>
+
+          {/* Loading indicator */}
+          {hasMore && (
+            <div 
+              ref={loadingRef} 
+              className="py-4 text-center"
+            >
+              <div className="animate-pulse text-primary">Loading more...</div>
+            </div>
+          )}
 
           {/* Last Week's Winners */}
           {lastWeekWinners.length > 0 && (
