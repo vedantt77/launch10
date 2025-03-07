@@ -1,8 +1,23 @@
-import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, getDoc, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Launch } from '../types/launch';
 
-// Static launches
+// Cache configuration
+const CACHE_DURATION = 30 * 60 * 1000; // 5 minutes in milliseconds
+let launchesCache: {
+  data: Launch[];
+  timestamp: number;
+} | null = null;
+
+let upvotesCache: {
+  [key: string]: {
+    upvotes: number;
+    upvotedBy: string[];
+    timestamp: number;
+  };
+} = {};
+
+// Static launches remain unchanged
 const staticLaunches: Launch[] = [
   {
     id: 'TouchBase-46',
@@ -512,8 +527,48 @@ const staticLaunches: Launch[] = [
   }
 ];
 
-// Function to get all launches including approved ones from Firestore
+// Function to get upvotes for a launch with caching
+async function getUpvotesWithCache(launchId: string): Promise<{ upvotes: number; upvotedBy: string[] }> {
+  const now = Date.now();
+  const cached = upvotesCache[launchId];
+
+  // Return cached data if it's still valid
+  if (cached && (now - cached.timestamp) < CACHE_DURATION) {
+    return {
+      upvotes: cached.upvotes,
+      upvotedBy: cached.upvotedBy
+    };
+  }
+
+  // Fetch fresh data
+  const launchRef = doc(db, 'launches', launchId);
+  const launchDoc = await getDoc(launchRef);
+  const data = launchDoc.exists() 
+    ? launchDoc.data() 
+    : { upvotes: 0, upvotedBy: [] };
+
+  // Update cache
+  upvotesCache[launchId] = {
+    upvotes: data.upvotes || 0,
+    upvotedBy: data.upvotedBy || [],
+    timestamp: now
+  };
+
+  return {
+    upvotes: data.upvotes || 0,
+    upvotedBy: data.upvotedBy || []
+  };
+}
+
+// Function to get all launches with caching
 export async function getLaunches(): Promise<Launch[]> {
+  const now = Date.now();
+
+  // Return cached data if it's still valid
+  if (launchesCache && (now - launchesCache.timestamp) < CACHE_DURATION) {
+    return launchesCache.data;
+  }
+
   try {
     // Get approved startups from Firestore
     const startupsRef = collection(db, 'startups');
@@ -522,13 +577,13 @@ export async function getLaunches(): Promise<Launch[]> {
     
     const approvedLaunches: Launch[] = [];
     
-    for (const docSnapshot of querySnapshot.docs) {
+    // Batch upvotes requests
+    const upvotesPromises = querySnapshot.docs.map(doc => getUpvotesWithCache(doc.id));
+    const upvotesResults = await Promise.all(upvotesPromises);
+    
+    querySnapshot.docs.forEach((docSnapshot, index) => {
       const data = docSnapshot.data();
-      
-      // Get upvotes data
-      const launchRef = doc(db, 'launches', docSnapshot.id);
-      const launchDoc = await getDoc(launchRef);
-      const upvoteData = launchDoc.exists() ? launchDoc.data() : { upvotes: 0, upvotedBy: [] };
+      const upvoteData = upvotesResults[index];
 
       approvedLaunches.push({
         id: docSnapshot.id,
@@ -540,35 +595,39 @@ export async function getLaunches(): Promise<Launch[]> {
         category: data.category || 'New Launch',
         listingType: data.listingType || 'regular',
         doFollowBacklink: true,
-        upvotes: upvoteData.upvotes || 0,
-        upvotedBy: upvoteData.upvotedBy || []
+        upvotes: upvoteData.upvotes,
+        upvotedBy: upvoteData.upvotedBy
       });
-    }
+    });
 
     // Add upvotes data to static launches
     const staticLaunchesWithUpvotes = await Promise.all(
       staticLaunches.map(async (launch) => {
-        const launchRef = doc(db, 'launches', launch.id);
-        const launchDoc = await getDoc(launchRef);
-        const upvoteData = launchDoc.exists() ? launchDoc.data() : { upvotes: 0, upvotedBy: [] };
-        
+        const upvoteData = await getUpvotesWithCache(launch.id);
         return {
           ...launch,
-          upvotes: upvoteData.upvotes || 0,
-          upvotedBy: upvoteData.upvotedBy || []
+          upvotes: upvoteData.upvotes,
+          upvotedBy: upvoteData.upvotedBy
         };
       })
     );
 
-    // Combine static and approved launches
-    return [...staticLaunchesWithUpvotes, ...approvedLaunches];
+    // Combine and cache the results
+    const allLaunches = [...staticLaunchesWithUpvotes, ...approvedLaunches];
+    launchesCache = {
+      data: allLaunches,
+      timestamp: now
+    };
+
+    return allLaunches;
   } catch (error) {
     console.error('Error fetching launches:', error);
-    return staticLaunches;
+    // Return cached data if available, otherwise return static launches
+    return launchesCache?.data || staticLaunches;
   }
 }
 
-// Function to get weekly launches
+// Function to get weekly launches with caching
 export async function getWeeklyLaunches(): Promise<Launch[]> {
   const launches = await getLaunches();
   
@@ -589,4 +648,10 @@ export async function getWeeklyLaunches(): Promise<Launch[]> {
     const launchDate = new Date(launch.launchDate);
     return launchDate >= startOfWeek && launchDate <= endOfWeek;
   });
+}
+
+// Function to clear caches (useful for testing or forced updates)
+export function clearLaunchesCache() {
+  launchesCache = null;
+  upvotesCache = {};
 }
