@@ -19,6 +19,7 @@ const SignupPage = lazy(() => import('@/pages/SignupPage').then(module => ({ def
 const ForgotPasswordPage = lazy(() => import('@/pages/ForgotPasswordPage').then(module => ({ default: module.ForgotPasswordPage })));
 const ProfilePage = lazy(() => import('@/pages/ProfilePage').then(module => ({ default: module.ProfilePage })));
 const AdminDashboard = lazy(() => import('@/pages/AdminDashboard').then(module => ({ default: module.AdminDashboard })));
+const SubmitStartupPage = lazy(() => import('@/pages/SubmitStartupPage').then(module => ({ default: module.SubmitStartupPage })));
 
 // Prefetch routes
 const prefetchRoutes = () => {
@@ -30,7 +31,8 @@ const prefetchRoutes = () => {
     () => import('@/pages/SignupPage'),
     () => import('@/pages/ForgotPasswordPage'),
     () => import('@/pages/ProfilePage'),
-    () => import('@/pages/AdminDashboard')
+    () => import('@/pages/AdminDashboard'),
+    () => import('@/pages/SubmitStartupPage')
   ];
 
   routes.forEach(route => {
@@ -140,6 +142,15 @@ function AppContent() {
                 <PageTransition>
                   <Suspense fallback={<LoadingFallback />}>
                     <AdminDashboard />
+                  </Suspense>
+                </PageTransition>
+              </PrivateRoute>
+            } />
+            <Route path="/submit" element={
+              <PrivateRoute>
+                <PageTransition>
+                  <Suspense fallback={<LoadingFallback />}>
+                    <SubmitStartupPage />
                   </Suspense>
                 </PageTransition>
               </PrivateRoute>
