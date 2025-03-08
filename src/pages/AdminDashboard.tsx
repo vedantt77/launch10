@@ -15,13 +15,13 @@ import { useToast } from '@/hooks/use-toast';
 import { SubmittedStartup } from '@/lib/types';
 import { Users, FileText, ThumbsUp } from 'lucide-react';
 
-type ListingType = 'regular' | 'boosted' | 'premium';
-
 interface DashboardStats {
   totalUsers: number;
   totalSubmissions: number;
   totalUpvotes: number;
 }
+
+type ListingType = 'regular' | 'boosted' | 'premium';
 
 export function AdminDashboard() {
   const { user } = useAuthContext();
@@ -34,6 +34,7 @@ export function AdminDashboard() {
   const [selectedListingType, setSelectedListingType] = useState<ListingType>('regular');
   const [isReapproveDialogOpen, setIsReapproveDialogOpen] = useState(false);
   const [doFollowBacklink, setDoFollowBacklink] = useState(true);
+  const [isImmediateLaunch, setIsImmediateLaunch] = useState(false);
   const [pendingStartups, setPendingStartups] = useState<SubmittedStartup[]>([]);
   const [approvedStartups, setApprovedStartups] = useState<SubmittedStartup[]>([]);
   const [rejectedStartups, setRejectedStartups] = useState<SubmittedStartup[]>([]);
@@ -177,7 +178,7 @@ export function AdminDashboard() {
 
     try {
       const startupRef = doc(db, 'startups', selectedStartupId);
-      const scheduledLaunchDate = selectedListingType === 'regular' 
+      const scheduledLaunchDate = selectedListingType === 'regular' && !isImmediateLaunch
         ? calculateNextLaunchDate() 
         : new Date();
 
@@ -194,13 +195,18 @@ export function AdminDashboard() {
 
       toast({
         title: 'Success',
-        description: `Startup approved as ${selectedListingType} listing${selectedListingType === 'regular' ? ' and scheduled for next week' : ' and launched immediately'}`,
+        description: `Startup approved as ${selectedListingType} listing${
+          selectedListingType === 'regular' && !isImmediateLaunch 
+            ? ' and scheduled for next week' 
+            : ' and launched immediately'
+        }`,
       });
 
       setIsApproveDialogOpen(false);
       setIsReapproveDialogOpen(false);
       setSelectedStartupId(null);
       setSelectedListingType('regular');
+      setIsImmediateLaunch(false);
     } catch (error) {
       console.error('Error updating startup status:', error);
       toast({
@@ -288,7 +294,10 @@ export function AdminDashboard() {
           </p>
           {startup.scheduledLaunchDate && (
             <p className="text-sm text-primary">
-              Scheduled for launch on: {startup.scheduledLaunchDate.toLocaleDateString()}
+              {startup.scheduledLaunchDate > new Date() 
+                ? `Scheduled for launch on: ${startup.scheduledLaunchDate.toLocaleDateString()}`
+                : `Launched on: ${startup.scheduledLaunchDate.toLocaleDateString()}`
+              }
             </p>
           )}
           {startup.status === 'approved' && (
@@ -460,6 +469,9 @@ export function AdminDashboard() {
       <Dialog open={isApproveDialogOpen || isReapproveDialogOpen} onOpenChange={(open) => {
         setIsApproveDialogOpen(open);
         setIsReapproveDialogOpen(open);
+        if (!open) {
+          setIsImmediateLaunch(false);
+        }
       }}>
         <DialogContent>
           <DialogHeader>
@@ -477,7 +489,7 @@ export function AdminDashboard() {
             >
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="regular" id="regular" />
-                <Label htmlFor="regular">Regular Listing (Next Week)</Label>
+                <Label htmlFor="regular">Regular Listing</Label>
               </div>
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="boosted" id="boosted" />
@@ -488,6 +500,19 @@ export function AdminDashboard() {
                 <Label htmlFor="premium">Premium Listing (Immediate)</Label>
               </div>
             </RadioGroup>
+
+            {selectedListingType === 'regular' && (
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="immediate-launch"
+                  checked={isImmediateLaunch}
+                  onCheckedChange={setIsImmediateLaunch}
+                />
+                <Label htmlFor="immediate-launch">
+                  Launch immediately (instead of next week)
+                </Label>
+              </div>
+            )}
 
             <div className="flex items-center space-x-2">
               <Switch
@@ -509,6 +534,7 @@ export function AdminDashboard() {
                 setIsReapproveDialogOpen(false);
                 setSelectedStartupId(null);
                 setSelectedListingType('regular');
+                setIsImmediateLaunch(false);
               }}
             >
               Cancel
