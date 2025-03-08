@@ -9,6 +9,9 @@ export function FeaturePopup() {
   const [isVisible, setIsVisible] = useState(false);
   const [isDismissed, setIsDismissed] = useState(false);
 
+  // List of paths where the popup should not appear
+  const excludedPaths = ['/boost', '/login', '/signup', '/submit'];
+
   useEffect(() => {
     const handleScroll = () => {
       if (window.scrollY > 200 && !isVisible) {
@@ -31,7 +34,7 @@ export function FeaturePopup() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, [isVisible]);
 
-  if (location.pathname === '/boost' || isDismissed) {
+  if (excludedPaths.includes(location.pathname) || isDismissed) {
     return null;
   }
 
@@ -50,11 +53,10 @@ export function FeaturePopup() {
           className="fixed bottom-4 right-4 z-50"
         >
           <motion.div 
-            className="bg-background border-2 border-primary/20 shadow-[0_0_15px_5px_rgba(0,0,0,0.1)] rounded-lg p-6 relative overflow-hidden"
+            className="bg-background border-2 border-primary/20 shadow-[0_0_15px_5px_rgba(0,0,0,0.1)] rounded-lg p-6 relative"
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
           >
-            <div className="absolute inset-0 bg-gradient-to-r from-red-500/10 via-blue-500/10 to-green-500/10 animate-[gradient_3s_ease-in-out_infinite] opacity-50" />
             <Link
               to="/boost"
               className="relative z-10 flex items-center gap-3"
@@ -62,7 +64,7 @@ export function FeaturePopup() {
               <div className="flex flex-col">
                 <span className="text-base font-semibold">🚀 Get Featured Now</span>
                 <span className="text-sm text-muted-foreground">
-                  Onlt at <span className="text-green-500 font-bold">$5/week</span>
+                  Only at <span className="text-green-500 font-bold">$5/week</span>
                 </span>
               </div>
             </Link>
