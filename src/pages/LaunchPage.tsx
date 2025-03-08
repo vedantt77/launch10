@@ -224,7 +224,7 @@ export function LaunchPage() {
           <AnimatedHeader />
           
           <h2 className="text-base sm:text-xl text-muted-foreground text-center mb-6 sm:mb-8">
-            Submit today and receive quality traffic and backlink! Our unique rotation system ensures equal exposure for all startups by rotating listings every 10 minutes - no upvotes needed. 🔄✨
+            Top 3 launches of the week get a do-follow backlink. Every listing is rotated every 10 minutes to ensure equal exposure 🔄
           </h2>
 
           {/* Premium listings */}
