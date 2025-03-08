@@ -1,5 +1,5 @@
 import { Card } from '@/components/ui/card';
-import { Rocket, ChevronsUp, AlarmClockOff, Users, Mails  } from 'lucide-react';
+import { Rocket, ChevronsUp, AlarmClockOff, Users,   } from 'lucide-react';
 
 const benefits = [
   
@@ -11,7 +11,7 @@ const benefits = [
   {
     icon: ChevronsUp,
     title: 'Basic Boost',
-    description: 'Stand out in between of regular listings in weekly and all tab'
+    description: 'Stand out in between of regular listings'
   },
   {
     icon: AlarmClockOff,
@@ -23,11 +23,7 @@ const benefits = [
     title: '1000s of active users',
     description: 'Reach a highly engaged audience of entrepreneurs and investors'
   },
-  {
-    icon: Mails,
-    title: 'Newsletter Mention',
-    description: 'Premium Boost buyers get 1x mentioned in our newsletter which is read by 100s of Indiehackers/founders'
-  }
+ 
   
 ];
 
