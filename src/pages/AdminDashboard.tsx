@@ -13,7 +13,6 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { SubmittedStartup } from '@/lib/types';
-import { useSubmissions, clearSubmissionsCache } from '@/lib/hooks/useSubmissions';
 
 type ListingType = 'regular' | 'boosted' | 'premium';
 
@@ -28,21 +27,10 @@ export function AdminDashboard() {
   const [selectedListingType, setSelectedListingType] = useState<ListingType>('regular');
   const [isReapproveDialogOpen, setIsReapproveDialogOpen] = useState(false);
   const [doFollowBacklink, setDoFollowBacklink] = useState(true);
-
-  const { 
-    submissions: pendingStartups,
-    isLoading: isLoadingPending 
-  } = useSubmissions(undefined, 'pending');
-
-  const { 
-    submissions: approvedStartups,
-    isLoading: isLoadingApproved 
-  } = useSubmissions(undefined, 'approved');
-
-  const { 
-    submissions: rejectedStartups,
-    isLoading: isLoadingRejected 
-  } = useSubmissions(undefined, 'rejected');
+  const [pendingStartups, setPendingStartups] = useState<SubmittedStartup[]>([]);
+  const [approvedStartups, setApprovedStartups] = useState<SubmittedStartup[]>([]);
+  const [rejectedStartups, setRejectedStartups] = useState<SubmittedStartup[]>([]);
+  const [isLoadingStartups, setIsLoadingStartups] = useState(true);
 
   useEffect(() => {
     const checkAdminStatus = async () => {
@@ -63,16 +51,70 @@ export function AdminDashboard() {
         }
 
         setIsAdmin(true);
+        setIsLoading(false);
       } catch (error) {
         console.error('Error checking admin status:', error);
         navigate('/');
-      } finally {
-        setIsLoading(false);
       }
     };
 
     checkAdminStatus();
   }, [user, navigate]);
+
+  const fetchStartups = async () => {
+    setIsLoadingStartups(true);
+    try {
+      const startupsRef = collection(db, 'startups');
+      
+      // Fetch pending startups
+      const pendingQuery = query(startupsRef, where('status', '==', 'pending'));
+      const pendingSnapshot = await getDocs(pendingQuery);
+      const pendingData = pendingSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        submittedAt: doc.data().createdAt.toDate(),
+        scheduledLaunchDate: doc.data().scheduledLaunchDate?.toDate()
+      })) as SubmittedStartup[];
+      setPendingStartups(pendingData);
+
+      // Fetch approved startups
+      const approvedQuery = query(startupsRef, where('status', '==', 'approved'));
+      const approvedSnapshot = await getDocs(approvedQuery);
+      const approvedData = approvedSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        submittedAt: doc.data().createdAt.toDate(),
+        scheduledLaunchDate: doc.data().scheduledLaunchDate?.toDate()
+      })) as SubmittedStartup[];
+      setApprovedStartups(approvedData);
+
+      // Fetch rejected startups
+      const rejectedQuery = query(startupsRef, where('status', '==', 'rejected'));
+      const rejectedSnapshot = await getDocs(rejectedQuery);
+      const rejectedData = rejectedSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        submittedAt: doc.data().createdAt.toDate(),
+        scheduledLaunchDate: doc.data().scheduledLaunchDate?.toDate()
+      })) as SubmittedStartup[];
+      setRejectedStartups(rejectedData);
+    } catch (error) {
+      console.error('Error fetching startups:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to fetch startups',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoadingStartups(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isAdmin) {
+      fetchStartups();
+    }
+  }, [isAdmin]);
 
   const calculateNextLaunchDate = () => {
     const now = new Date();
@@ -109,7 +151,8 @@ export function AdminDashboard() {
         updatedAt: Timestamp.now()
       });
 
-      clearSubmissionsCache();
+      // Refresh the startups lists
+      await fetchStartups();
 
       toast({
         title: 'Success',
@@ -138,7 +181,8 @@ export function AdminDashboard() {
         updatedAt: Timestamp.now()
       });
 
-      clearSubmissionsCache();
+      // Refresh the startups lists
+      await fetchStartups();
 
       toast({
         title: 'Success',
@@ -280,7 +324,7 @@ export function AdminDashboard() {
             </TabsList>
 
             <TabsContent value="pending">
-              {isLoadingPending ? (
+              {isLoadingStartups ? (
                 <div className="text-center py-8">
                   <div className="animate-pulse text-primary">Loading pending submissions...</div>
                 </div>
@@ -296,7 +340,7 @@ export function AdminDashboard() {
             </TabsContent>
 
             <TabsContent value="approved">
-              {isLoadingApproved ? (
+              {isLoadingStartups ? (
                 <div className="text-center py-8">
                   <div className="animate-pulse text-primary">Loading approved submissions...</div>
                 </div>
@@ -312,7 +356,7 @@ export function AdminDashboard() {
             </TabsContent>
 
             <TabsContent value="rejected">
-              {isLoadingRejected ? (
+              {isLoadingStartups ? (
                 <div className="text-center py-8">
                   <div className="animate-pulse text-primary">Loading rejected submissions...</div>
                 </div>
