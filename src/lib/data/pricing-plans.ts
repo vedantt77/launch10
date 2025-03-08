@@ -16,9 +16,20 @@ interface PricingPlan {
 
 export const pricingPlans: PricingPlan[] = [
   {
+    name: 'Free',
+    price: 0,
+    period: 'weekly',
+    features: [
+      '- Featured on homepage for 1 week',
+      '- Standard queue',
+      '- Do-follow backlink for top 3 launch'
+    ],
+    buttonText: 'Submit',
+  },
+  {
     name: 'Basic Boost',
     price: 5,
-    period: 'week',
+    period: 'weekly',
     badge: { 
       text: 'Most Popular',
       variant: 'default'
@@ -27,15 +38,15 @@ export const pricingPlans: PricingPlan[] = [
       '- Launch immediately',
       '- Boosted listing for a week',
       '- After boosted listing additional regualr listing for 1 week',
-      '- Priority support'
+      '- Boost preview',
+      '- Guaranteed do-follow backlink'
     ],
-    buttonText: 'Get Started',
-    paypalPlanId: 'basic-boost'
+    buttonText: 'Buy Now',
   },
   {
     name: 'Premium Boost',
     price: 15,
-    period: 'week',
+    period: 'weekly',
     badge: { 
       text: 'Best Value',
       variant: 'secondary'
@@ -44,25 +55,10 @@ export const pricingPlans: PricingPlan[] = [
       '- Launch immediately',
       '- Premium listing for a week',
       '- After boosted listing additional regualr listing for 1 week',
-      '- 1x Newsletter mention'
+      '- Boost preview',
+      '- Guaranteed do-follow backlink'
     ],
     highlighted: true,
-    buttonText: 'Upgrade to Pro',
-    paypalPlanId: 'pro-boost'
-  },
-  {
-    name: 'Custom',
-    price: 'Custom',
-    period: 'annually',
-    badge: {
-      text: 'Enterprise',
-      variant: 'outline'
-    },
-    features: [
-      '- Custom promotion plan',
-      '- Dedicated support',
-      '- Custom integrations'
-    ],
-    buttonText: 'Contact Sales'
+    buttonText: 'Buy Now',
   }
 ];
