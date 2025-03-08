@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { collection, query, where, getDocs, doc, updateDoc, Timestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, updateDoc, Timestamp, getCountFromServer } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuthContext } from '@/providers/AuthProvider';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,8 +13,15 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { SubmittedStartup } from '@/lib/types';
+import { Users, FileText, ThumbsUp } from 'lucide-react';
 
 type ListingType = 'regular' | 'boosted' | 'premium';
+
+interface DashboardStats {
+  totalUsers: number;
+  totalSubmissions: number;
+  totalUpvotes: number;
+}
 
 export function AdminDashboard() {
   const { user } = useAuthContext();
@@ -31,6 +38,11 @@ export function AdminDashboard() {
   const [approvedStartups, setApprovedStartups] = useState<SubmittedStartup[]>([]);
   const [rejectedStartups, setRejectedStartups] = useState<SubmittedStartup[]>([]);
   const [isLoadingStartups, setIsLoadingStartups] = useState(true);
+  const [stats, setStats] = useState<DashboardStats>({
+    totalUsers: 0,
+    totalSubmissions: 0,
+    totalUpvotes: 0
+  });
 
   useEffect(() => {
     const checkAdminStatus = async () => {
@@ -60,6 +72,31 @@ export function AdminDashboard() {
 
     checkAdminStatus();
   }, [user, navigate]);
+
+  const fetchStats = async () => {
+    try {
+      // Get total users
+      const usersSnapshot = await getCountFromServer(collection(db, 'users'));
+      const totalUsers = usersSnapshot.data().count;
+
+      // Get total submissions
+      const startupsSnapshot = await getCountFromServer(collection(db, 'startups'));
+      const totalSubmissions = startupsSnapshot.data().count;
+
+      // Get total upvotes
+      const launchesRef = collection(db, 'launches');
+      const launchesSnapshot = await getDocs(launchesRef);
+      const totalUpvotes = launchesSnapshot.docs.reduce((sum, doc) => sum + (doc.data().upvotes || 0), 0);
+
+      setStats({
+        totalUsers,
+        totalSubmissions,
+        totalUpvotes
+      });
+    } catch (error) {
+      console.error('Error fetching stats:', error);
+    }
+  };
 
   const fetchStartups = async () => {
     setIsLoadingStartups(true);
@@ -113,6 +150,7 @@ export function AdminDashboard() {
   useEffect(() => {
     if (isAdmin) {
       fetchStartups();
+      fetchStats();
     }
   }, [isAdmin]);
 
@@ -151,8 +189,8 @@ export function AdminDashboard() {
         updatedAt: Timestamp.now()
       });
 
-      // Refresh the startups lists
-      await fetchStartups();
+      // Refresh the startups lists and stats
+      await Promise.all([fetchStartups(), fetchStats()]);
 
       toast({
         title: 'Success',
@@ -181,8 +219,8 @@ export function AdminDashboard() {
         updatedAt: Timestamp.now()
       });
 
-      // Refresh the startups lists
-      await fetchStartups();
+      // Refresh the startups lists and stats
+      await Promise.all([fetchStartups(), fetchStats()]);
 
       toast({
         title: 'Success',
@@ -309,6 +347,51 @@ export function AdminDashboard() {
       <div className="min-h-screen bg-background py-12 px-4">
         <div className="container max-w-4xl mx-auto">
           <h1 className="text-3xl font-bold mb-8">Admin Dashboard</h1>
+
+          {/* Stats Widgets */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Total Users</p>
+                    <h2 className="text-2xl font-bold">{stats.totalUsers}</h2>
+                  </div>
+                  <div className="p-2 bg-primary/10 rounded-full">
+                    <Users className="h-6 w-6 text-primary" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Total Submissions</p>
+                    <h2 className="text-2xl font-bold">{stats.totalSubmissions}</h2>
+                  </div>
+                  <div className="p-2 bg-primary/10 rounded-full">
+                    <FileText className="h-6 w-6 text-primary" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Total Upvotes</p>
+                    <h2 className="text-2xl font-bold">{stats.totalUpvotes}</h2>
+                  </div>
+                  <div className="p-2 bg-primary/10 rounded-full">
+                    <ThumbsUp className="h-6 w-6 text-primary" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
           
           <Tabs defaultValue="pending" className="w-full">
             <TabsList className="grid w-full grid-cols-3 mb-8">
