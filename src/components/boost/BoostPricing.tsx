@@ -116,7 +116,7 @@ export function BoostPricing() {
                   whileHover={{ scale: 1.03 }}
                   whileTap={{ scale: 0.97 }}
                 >
-                  {plan.name === 'Basic Boost' ? (
+                  {plan.name === 'Free' ? (
                     <Button 
                       className={`w-full relative group ${
                         plan.highlighted 
@@ -127,32 +127,10 @@ export function BoostPricing() {
                       asChild
                     >
                       <a 
-                        href="https://www.creem.io/payment/prod_7FO7FxcXQLx26V29dKw8TB" 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="relative py-6 overflow-hidden"
+                        href="/submit"
+                        className="relative py-6"
                       >
-                        <span className="relative z-10">Buy Now</span>
-                        <div className="absolute inset-0 bg-gradient-to-r from-primary/0 via-primary/10 to-primary/0 transform -skew-x-12 group-hover:animate-shine" />
-                      </a>
-                    </Button>
-                  ) : plan.name === 'Premium Boost' ? (
-                    <Button 
-                      className={`w-full relative group ${
-                        plan.highlighted 
-                          ? 'bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg' 
-                          : 'bg-primary/90 hover:bg-primary text-primary-foreground'
-                      }`}
-                      size="lg"
-                      asChild
-                    >
-                      <a 
-                        href="https://www.creem.io/payment/prod_7QY1xoxYvmD381CkLFgH9N" 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="relative py-6 overflow-hidden"
-                      >
-                        <span className="relative z-10">Buy Now</span>
+                        <span className="relative z-10">Submit</span>
                         <div className="absolute inset-0 bg-gradient-to-r from-primary/0 via-primary/10 to-primary/0 transform -skew-x-12 group-hover:animate-shine" />
                       </a>
                     </Button>
@@ -160,7 +138,7 @@ export function BoostPricing() {
                     <Button 
                       className={`w-full relative group ${
                         plan.highlighted 
-                          ? 'bg-primary hover:bg-primary/90 text-primary-foreground' 
+                          ? 'bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg' 
                           : 'bg-primary/90 hover:bg-primary text-primary-foreground'
                       }`}
                       size="lg"
@@ -170,7 +148,7 @@ export function BoostPricing() {
                         href="mailto:contact@startups.ad"
                         className="relative py-6"
                       >
-                        <span className="relative z-10">{plan.buttonText || 'Contact Us'}</span>
+                        <span className="relative z-10">Buy Now</span>
                         <div className="absolute inset-0 bg-gradient-to-r from-primary/0 via-primary/10 to-primary/0 transform -skew-x-12 group-hover:animate-shine" />
                       </a>
                     </Button>
