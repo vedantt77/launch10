@@ -29,12 +29,20 @@ export function LaunchPage() {
     const fetchLaunches = async () => {
       try {
         const launches = await getLaunches();
-        setAllLaunches(launches);
+        
+        // Filter out launches scheduled for the future
+        const now = new Date();
+        const availableLaunches = launches.filter(launch => {
+          const launchDate = new Date(launch.launchDate);
+          return launchDate <= now || launch.listingType === 'premium' || launch.listingType === 'boosted';
+        });
+        
+        setAllLaunches(availableLaunches);
         
         // Initially load first batch
-        const initialBatch = launches.slice(0, BATCH_SIZE);
+        const initialBatch = availableLaunches.slice(0, BATCH_SIZE);
         setDisplayedLaunches(initialBatch);
-        setHasMore(launches.length > BATCH_SIZE);
+        setHasMore(availableLaunches.length > BATCH_SIZE);
         
         setIsLoading(false);
       } catch (error) {
